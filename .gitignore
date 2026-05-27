@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+dist/
+build/
+*.spec.bak
+
+# 虚拟环境
+.venv/
+venv/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# 运行时 / 本地数据（勿提交）
+cache/
+logs/
+startup.log
+*.log
+
+# 二进制与打包产物
+*.exe
+onefile版/
+upx-5.1.1-win64/
+
+# 本地打包与 EEWCN 订阅脚本（勿提交）
+build_onefile.bat
+build_onefile.spec
+custom.js
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
