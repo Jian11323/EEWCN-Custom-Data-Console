@@ -18,8 +18,9 @@ from services.internal import custom as custom_internal
 
 
 class CustomSourceTab(QWidget):
-    def __init__(self, parent=None):
+    def __init__(self, mgmt=None, parent=None):
         super().__init__(parent)
+        self._mgmt = mgmt
         self._url_entry = QLineEdit()
         self._url_entry.setPlaceholderText("输入 http/https/ws/wss URL，留空则关闭")
         self._status_label = QLabel("状态：—")
@@ -44,7 +45,7 @@ class CustomSourceTab(QWidget):
             "• HTTP/HTTPS：每秒 GET 一次获取预警 JSON；留空即关闭。\n"
             "• WS/WSS：长连接接收 JSON 报文。\n"
             "• 融合列表中的机构名取自 JSON 的 source（优先）或 sourceName。\n"
-            "• 修改 URL 后请重启「融合数据」服务后生效。"
+            "• 若融合服务正在运行，保存后会尝试立即加载新 URL。"
         )
         hint.setWordWrap(True)
         hint.setStyleSheet("color: #57606a; font-size: 12px;")
@@ -142,12 +143,25 @@ class CustomSourceTab(QWidget):
                 )
                 return
         set_custom_data_source_url(url)
-        QMessageBox.information(
-            self,
-            "已保存",
-            f"已写入配置（{CUSTOM_DATA_SOURCE_URL_KEY}）。\n"
-            "请重启「融合数据」服务后采集才会使用新 URL。",
-        )
+        if self._mgmt is not None:
+            self._mgmt.send_command(
+                "eew",
+                "CUSTOM_DATA_SOURCE_URL_SET",
+                {"url": url},
+            )
+            QMessageBox.information(
+                self,
+                "已保存",
+                f"已写入配置（{CUSTOM_DATA_SOURCE_URL_KEY}）。\n"
+                "如果融合服务正在运行，将尝试立即加载新 URL。",
+            )
+        else:
+            QMessageBox.information(
+                self,
+                "已保存",
+                f"已写入配置（{CUSTOM_DATA_SOURCE_URL_KEY}）。\n"
+                "请重启「融合数据」服务后采集才会使用新 URL。",
+            )
         self._refresh_status()
 
     def _refresh_status(self) -> None:

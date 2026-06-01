@@ -167,6 +167,8 @@ def _main_loop() -> None:
 
 def start() -> threading.Thread:
     global _thread, _stop, _last_hash
+    if _thread is not None and _thread.is_alive():
+        return _thread
     _stop.clear()
     _last_hash = None
     _thread = threading.Thread(target=_main_loop, name="CustomSource", daemon=True)

@@ -67,7 +67,13 @@ python services/fused/main.py
 * 新西兰地震速报：[GeoNet](https://www.geonet.org.nz/)
 * 意大利地震速报：[INGV](https://www.ingv.it/)
 * 用户自定义 HTTP/WS 预警源
+## 开源声明
 
+本项目为开源软件，采用 [GNU GPLv3](LICENSE) 许可证发布。
+
+本仓库代码可供公开查阅、修改、分发和复用，但请勿将本项目用于违法、侵权或有害用途。
+
+若本软件被他人滥用或用于违反法律法规的行为，作者不对该等行为负责；使用者应自行承担使用风险并遵守适用法律。
 ## 许可证
 
 本项目采用 [GNU GPLv3](LICENSE) 开源协议

@@ -230,7 +230,7 @@ class MainWindow(QMainWindow):
             _make_page(SourcesTab(self._mgmt), sources_log)
         )
 
-        self._custom_tab = CustomSourceTab()
+        self._custom_tab = CustomSourceTab(self._mgmt)
         self._content_stack.addWidget(self._custom_tab)
 
         status_log = CombinedLogPanel()

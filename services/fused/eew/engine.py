@@ -3852,6 +3852,30 @@ class WebSocketServerManager:
                 else:
                     await websocket.send(json.dumps(result, ensure_ascii=False, indent=2))
 
+            elif command in (
+                '设置自定义数据源URL',
+                'CUSTOM_DATA_SOURCE_URL_SET',
+                'custom_data_source_url_set',
+            ):
+                from services.common.source_switches import (
+                    is_eew_enabled,
+                    set_custom_data_source_url,
+                )
+                from services.internal import custom as custom_internal
+                url = params.get('url', '') if is_json else ''
+                set_custom_data_source_url(url)
+                started = False
+                if url and is_eew_enabled('CUSTOM'):
+                    thread = custom_internal.start()
+                    started = thread is not None and thread.is_alive()
+                else:
+                    custom_internal.stop()
+                result = {"ok": True, "url": url, "started": started}
+                if is_json:
+                    await self._send_mgmt_json(websocket, {"type": "custom_data_source_url_set", "data": result})
+                else:
+                    await websocket.send(json.dumps(result, ensure_ascii=False, indent=2))
+
             elif command in ('SOURCE_FILTERS_GET', 'source_filters_get'):
                 from services.common.source_filters import get_filter_registry
                 payload = {"filters": get_filter_registry().snapshot()}

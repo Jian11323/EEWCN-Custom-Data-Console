@@ -23,7 +23,7 @@ _MGMT_DONE_TYPES = frozenset({
     "stats", "history", "full_history", "ip_details", "blacklist_list",
     "fanstudio_status", "auto_check", "thread_pool_status",
     "thread_pool_check", "thread_pool_restart",
-    "source_switches", "source_switches_set",
+    "source_switches", "source_switches_set", "custom_data_source_url_set",
 })
 
 

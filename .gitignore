@@ -28,9 +28,11 @@ startup.log
 onefile版/
 upx-5.1.1-win64/
 
-# 本地打包与 EEWCN 订阅脚本（勿提交）
+# 本地打包、Git 同步与 EEWCN 订阅脚本（勿提交）
 build_onefile.bat
 build_onefile.spec
+sync_github.bat
+clear_github_repo.bat
 custom.js
 
 # OS

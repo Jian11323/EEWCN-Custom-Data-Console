@@ -48,6 +48,22 @@ def start_internal_fetchers() -> None:
     logger.info("内部数据源采集已启动 (%d 线程)", len(_threads))
 
 
+def start_custom_fetcher() -> bool:
+    """Immediate start custom source if URL is configured."""
+    if not is_eew_enabled("CUSTOM"):
+        return False
+    url = get_custom_data_source_url()
+    if not url:
+        return False
+    try:
+        _threads.append(custom.start())
+        logger.info("内部采集已启动: CUSTOM")
+        return True
+    except Exception as e:
+        logger.error("内部采集启动失败 CUSTOM: %s", e)
+        return False
+
+
 def stop_internal_fetchers() -> None:
     custom.stop()
     bmkg.stop()
