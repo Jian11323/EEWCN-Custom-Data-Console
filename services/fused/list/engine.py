@@ -99,7 +99,7 @@ API_URLS = {
     'JMA': "https://api.p2pquake.net/v2/history?codes=551&limit=30",  # 日本气象厅 - 获取全部数据
     'GEONET': "https://api.geonet.org.nz/quake?MMI=-1",  # 新西兰GeoNet - 获取全部数据
     'BMKG': "https://data.bmkg.go.id/DataMKG/TEWS/gempaterkini.json",  # 印度尼西亚BMKG - 获取全部数据
-    'INGV': "https://api.mdoe123.top/ingv_list?number=25",  # 意大利国家地球物理与火山学研究 - 获取全部数据
+    'INGV': "https://api.terraquakeapi.com/v1/earthquakes/recent?limit=50",  # 意大利国家地球物理与火山学研究 - TerraQuake API / recent
 }
 
 # FanStudio WebSocket配置
@@ -1671,20 +1671,20 @@ class INGVSource:
     def fetch():
         """获取INGV全部数据并全部解析"""
         def extract_events(data):
-            if not isinstance(data, dict) or data.get("type") != "ingv_eqlist":
+            if not isinstance(data, dict):
                 return []
-            events = []
-            for key in sorted(data.keys()):
-                if key.startswith("No") and isinstance(data[key], dict):
-                    events.append(data[key])
-            return events
+            payload = data.get("payload")
+            if not isinstance(payload, list):
+                return []
+            return payload
 
         def get_id(first, last):
-            first_id = first.get("EventID", "")
-            return first_id if first is last else f"{first_id}_{last.get('EventID', '')}"
+            first_id = str(first.get("properties", {}).get("eventId", ""))
+            last_id = str(last.get("properties", {}).get("eventId", ""))
+            return first_id if first is last else f"{first_id}_{last_id}"
 
         def get_time(event):
-            return event.get("otime", "")
+            return event.get("properties", {}).get("time", "")
 
         return INGVSource._fetch_and_check_cache(API_URLS['INGV'], "INGV", None, extract_events, get_id, get_time)
     
@@ -1727,81 +1727,61 @@ class INGVSource:
         result = []
         for item in data:
             try:
-                # 获取震级（优先选择有效的震级：Mwpd > Mwp > mb）
-                mag = None
-                mwpd_str = item.get("Mwpd", "")
-                mwp_str = item.get("Mwp", "")
-                mb_str = item.get("mb", "")
-                
-                if mwpd_str and mwpd_str != "-9.0":
-                    try:
-                        mag = float(mwpd_str)
-                    except (ValueError, TypeError):
-                        pass
-                
-                if mag is None and mwp_str and mwp_str != "-9.0":
-                    try:
-                        mag = float(mwp_str)
-                    except (ValueError, TypeError):
-                        pass
-                
-                if mag is None and mb_str and mb_str != "-9.0":
-                    try:
-                        mag = float(mb_str)
-                    except (ValueError, TypeError):
-                        pass
-                
-                if mag is None or mag <= 0:
+                properties = item.get("properties") or {}
+                geometry = item.get("geometry") or {}
+
+                mag = properties.get("mag")
+                if mag is None:
+                    continue
+                try:
+                    mag = float(mag)
+                except (TypeError, ValueError):
+                    continue
+                if mag <= 0:
                     continue
 
-                # 获取时间并转换为北京时间
-                event_time_str = item.get("otime", "")
+                event_time_str = properties.get("time", "")
                 if not event_time_str:
                     continue
-                
-                try:
-                    parts = event_time_str.split("-", 1)
-                    if len(parts) == 2:
-                        date_part = parts[0].replace(".", "-", 2)
-                        time_part = parts[1]
-                        event_time_str = f"{date_part} {time_part}"
-                    event_time = datetime.strptime(event_time_str, "%Y-%m-%d %H:%M:%S")
-                except (ValueError, TypeError):
-                    event_time = Utils.parse_time(event_time_str)
-                    if not event_time:
-                        continue
-                
+
+                event_time = Utils.parse_time(event_time_str)
+                if not event_time:
+                    continue
+
                 if event_time.tzinfo is None:
                     event_time = pytz.UTC.localize(event_time)
                 event_time_utc8 = event_time.astimezone(pytz.timezone('Asia/Shanghai'))
 
-                # 获取坐标
-                try:
-                    lat = float(item.get("lat", 0)) if item.get("lat") is not None else 0.0
-                    lon = float(item.get("lon", 0)) if item.get("lon") is not None else 0.0
-                except (ValueError, TypeError):
-                    lat, lon = 0.0, 0.0
+                coords = geometry.get("coordinates")
+                if isinstance(coords, (list, tuple)) and len(coords) >= 2:
+                    try:
+                        lon = float(coords[0]) if coords[0] is not None else 0.0
+                    except (TypeError, ValueError):
+                        lon = 0.0
+                    try:
+                        lat = float(coords[1]) if coords[1] is not None else 0.0
+                    except (TypeError, ValueError):
+                        lat = 0.0
+                    try:
+                        depth = float(coords[2]) if len(coords) > 2 and coords[2] is not None else 0.0
+                    except (TypeError, ValueError):
+                        depth = 0.0
+                else:
+                    lat, lon, depth = 0.0, 0.0, 0.0
 
-                # 获取深度
-                try:
-                    depth = float(item.get("depth", 0)) if item.get("depth") is not None else 0.0
-                except (ValueError, TypeError):
-                    depth = 0.0
-
-                # 获取位置信息
-                location_raw = item.get("location", "未知地区")
+                location_raw = properties.get("place", "未知地区")
                 if not location_raw or not isinstance(location_raw, str):
                     location_raw = "未知地区"
 
                 location = TranslationService.translate_location(location_raw, lat=lat, lon=lon, source='INGV')
 
-                # 获取事件ID
-                event_id = item.get("EventID", "")
+                event_id = properties.get("eventId") or properties.get("originId") or ""
                 if not event_id:
                     event_timestamp = int(event_time_utc8.timestamp())
                     event_id = f"ingv_{event_timestamp}_{int(lat*10)}_{int(lon*10)}_{int(mag*10)}"
+                else:
+                    event_id = str(event_id)
 
-                # 构建事件字典
                 event = {
                     "id": event_id,
                     "O_TIME": event_time_utc8.strftime('%Y-%m-%d %H:%M:%S'),
