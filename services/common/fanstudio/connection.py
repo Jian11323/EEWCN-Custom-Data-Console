@@ -6,7 +6,7 @@ import json
 import logging
 import os
 import random
-import ssl
+from services.fused.common.ws_client import ws_run_forever_kwargs
 import sys
 import threading
 import time
@@ -180,7 +180,7 @@ class FanStudioConnection:
                     self._ws = ws_app
                 if self._stop.is_set():
                     break
-                ws_app.run_forever(ping_interval=None, sslopt={"cert_reqs": ssl.CERT_NONE})
+                ws_app.run_forever(ping_interval=None, **ws_run_forever_kwargs())
             except Exception as e:
                 self.logger.debug(f"Fan Studio 连接异常: {e}")
             finally:

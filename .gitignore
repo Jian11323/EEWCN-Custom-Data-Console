@@ -12,10 +12,31 @@ build/
 venv/
 env/
 
-# IDE
+# IDE / 编辑器
 .idea/
 .vscode/
+.cursor/
 *.swp
+
+# 测试 / 静态检查缓存
+.pytest_cache/
+.ruff_cache/
+pytest-cache-files-*/
+.mypy_cache/
+htmlcov/
+.coverage
+coverage.xml
+
+# 开发与 CI（勿提交公开仓库）
+tests/
+requirements-dev.txt
+.github/
+docs/
+pyproject.toml
+
+# 环境变量（含密钥，勿提交）
+.env
+.env.*
 
 # 运行时 / 本地数据（勿提交）
 cache/
@@ -31,9 +52,24 @@ upx-5.1.1-win64/
 # 本地打包、Git 同步与 EEWCN 订阅脚本（勿提交）
 build_onefile.bat
 build_onefile.spec
+build_onefile.bat.example
+build_onefile.spec.example
 sync_github.bat
 clear_github_repo.bat
 custom.js
+
+# 本地开发/测试脚本（勿提交）
+_fix_split.js
+_test_travel_time.js
+run.bat
+
+# 拆分前单体 engine 参考（勿在生产 import）
+_orig/
+_tools/
+TravelTimes.js
+tjma2001h.zip
+tjma2001h_extracted/
+EEWCN-Custom-Data-Console.zip
 
 # OS
 Thumbs.db

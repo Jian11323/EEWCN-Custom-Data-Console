@@ -10,6 +10,9 @@ from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+from services.common.ports import DEFAULT_EEW_PORT, DEFAULT_LIST_PORT
+from services.common.http_poll_intervals import HTTP_POLL_SOURCES, get_all_intervals
+
 APP_NAME = "custom-datasource-console"
 
 
@@ -33,41 +36,53 @@ class ServiceEnvConfig:
 @dataclass
 class ConsoleSettings:
     service_env: ServiceEnvConfig = field(default_factory=ServiceEnvConfig)
-    mgmt_host: str = "127.0.0.1"
-    mgmt_port: int = 2050
+    eew_port: int = DEFAULT_EEW_PORT
+    list_port: int = DEFAULT_LIST_PORT
+    custom_js_path: str = ""
     auto_start_on_launch: bool = False
     start_delay_aggregate_sec: float = 0.0
     start_delay_after_aggregate_sec: float = 2.5
     custom_data_source_url: str = ""
+    http_poll_intervals: Dict[str, float] = field(default_factory=dict)
 
     def to_dict(self) -> dict:
+        intervals = self.http_poll_intervals or get_all_intervals()
         return {
             "service_env": asdict(self.service_env),
-            "mgmt_host": self.mgmt_host,
-            "mgmt_port": self.mgmt_port,
+            "eew_port": self.eew_port,
+            "list_port": self.list_port,
+            "custom_js_path": self.custom_js_path,
             "auto_start_on_launch": self.auto_start_on_launch,
             "start_delay_aggregate_sec": self.start_delay_aggregate_sec,
             "start_delay_after_aggregate_sec": self.start_delay_after_aggregate_sec,
             "CUSTOM_DATA_SOURCE_URL": self.custom_data_source_url,
+            "http_poll_intervals": intervals,
         }
 
     @classmethod
     def from_dict(cls, data: dict) -> "ConsoleSettings":
         se = data.get("service_env", {})
-        mgmt_host = data.get("mgmt_host") or data.get("eew_mgmt_host", "127.0.0.1")
-        mgmt_port = int(
-            data.get("mgmt_port", data.get("eew_mgmt_port", data.get("list_mgmt_port", 2050)))
-        )
+        raw_intervals = data.get("http_poll_intervals", {})
+        intervals: Dict[str, float] = {}
+        if isinstance(raw_intervals, dict):
+            for key in HTTP_POLL_SOURCES:
+                if key in raw_intervals:
+                    try:
+                        intervals[key] = float(raw_intervals[key])
+                    except (TypeError, ValueError):
+                        pass
         return cls(
             service_env=ServiceEnvConfig(
                 fused_core=se.get("fused_core", se.get("fused_eew_api", {})) or {},
             ),
-            mgmt_host=mgmt_host,
-            mgmt_port=mgmt_port,
+            eew_port=int(data.get("eew_port", DEFAULT_EEW_PORT)),
+            list_port=int(data.get("list_port", DEFAULT_LIST_PORT)),
+            custom_js_path=(data.get("custom_js_path") or "").strip(),
             auto_start_on_launch=bool(data.get("auto_start_on_launch", False)),
             start_delay_aggregate_sec=float(data.get("start_delay_aggregate_sec", 0)),
             start_delay_after_aggregate_sec=float(data.get("start_delay_after_aggregate_sec", 2.5)),
             custom_data_source_url=(data.get("CUSTOM_DATA_SOURCE_URL") or "").strip(),
+            http_poll_intervals=intervals,
         )
 
 

@@ -3,9 +3,9 @@
 EEW + List 融合服务（单进程）
 - 唯一 Fan Studio /all 连接
 - 内部采集 自定义源/BMKG/GeoNet/Early-est
-- EEW: WS 5000
-- List: HTTP 8150
-- 管理: WebSocket 2050（EEW+List 统一，channel 区分）
+- EEW: WebSocket（127.0.0.1，端口可配置）
+- List: HTTP（127.0.0.1，端口可配置）
+- 管理: 控制台 stdin IPC（无 TCP 管理端口）
 """
 
 from __future__ import annotations
@@ -75,11 +75,16 @@ def run() -> None:
     MainHandler.start_threads()
     MainHandler.start_servers()
 
+    from services.common.ports import LOCAL_BIND, get_eew_port, get_list_port
+
+    eew_port = get_eew_port()
+    list_port = get_list_port()
+
     print("=" * 60)
     print("融合核心服务 fused_core")
-    print("  EEW  WS: 5000")
-    print("  List HTTP: 8150")
-    print("  管理 WS: 2050")
+    print(f"  EEW  WS: {LOCAL_BIND}:{eew_port}")
+    print(f"  List HTTP: {LOCAL_BIND}:{list_port}")
+    print("  管理: 控制台 IPC（stdin）")
     print("  Fan Studio: 单条共享 /all 连接")
     print("  内部源: 自定义/BMKG/GeoNet/Early-est")
     print("  日志目录:", get_log_dir())

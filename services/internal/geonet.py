@@ -11,13 +11,13 @@ from typing import Optional
 import requests
 
 from services.common.bus import get_event_bus
+from services.common.http_poll_intervals import get_poll_interval
 from services.common.source_status import get_source_status_registry
 
 logger = logging.getLogger("internal.geonet")
 
 SOURCE_ID = "geonet"
 API_URL = "https://api.geonet.org.nz/quake?MMI=-1"
-POLL_INTERVAL = 5
 HTTP_TIMEOUT = 12
 
 _stop = threading.Event()
@@ -83,7 +83,7 @@ def _loop() -> None:
         except Exception as e:
             logger.exception("GeoNet 轮询异常")
             reg.record_error(SOURCE_ID, str(e))
-        _stop.wait(POLL_INTERVAL)
+        _stop.wait(get_poll_interval("geonet"))
 
 
 def start() -> threading.Thread:

@@ -14,12 +14,12 @@ import requests
 from services.common.bus import get_event_bus
 from services.common.custom_adapter import parse_custom_payload
 from services.common.source_status import get_source_status_registry
+from services.common.http_poll_intervals import get_poll_interval
 from services.common.source_switches import get_custom_data_source_url
 
 logger = logging.getLogger("internal.custom")
 
 SOURCE_ID = "custom"
-POLL_INTERVAL = 1.0
 HTTP_TIMEOUT = 12
 
 _stop = threading.Event()
@@ -157,7 +157,7 @@ def _main_loop() -> None:
         if low.startswith("http://") or low.startswith("https://"):
             reg.set_connected(SOURCE_ID, True)
             _poll_http(url)
-            _stop.wait(POLL_INTERVAL)
+            _stop.wait(get_poll_interval("custom"))
         elif low.startswith("ws://") or low.startswith("wss://"):
             _ws_loop(url)
         else:

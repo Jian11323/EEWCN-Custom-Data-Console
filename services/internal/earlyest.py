@@ -12,6 +12,7 @@ import urllib3
 from bs4 import BeautifulSoup
 
 from services.common.bus import get_event_bus
+from services.common.http_poll_intervals import get_poll_interval
 from services.common.source_status import get_source_status_registry
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -23,7 +24,6 @@ EARLYEST_URL = "http://early-est.rm.ingv.it/hypomessage.html"
 EARLYEST_MAGNITUDE_BORDER = 1.0
 EARLYEST_WINDOW = 60
 MAX_LEN = 10
-POLL_INTERVAL = 5
 HTTP_TIMEOUT = 15
 
 EARLYEST_PROCESS_POLY = [
@@ -232,7 +232,7 @@ def _loop() -> None:
         except Exception as e:
             logger.exception("Early-est 轮询异常")
             reg.record_error(SOURCE_ID, str(e))
-        _stop.wait(POLL_INTERVAL)
+        _stop.wait(get_poll_interval("early_est"))
 
 
 def start() -> threading.Thread:

@@ -13,12 +13,18 @@ from typing import Dict, Optional
 
 from PyQt5.QtCore import QThread, pyqtSignal
 
+from console.ipc_client import get_ipc_registry, parse_mgmt_ipc_line
+
 
 class ServiceProcess(QThread):
     started_sig = pyqtSignal(str)
     stopped_sig = pyqtSignal(str, int)
     output = pyqtSignal(str, str)
     status_update = pyqtSignal(str, dict)
+
+    @property
+    def subprocess(self) -> Optional[subprocess.Popen]:
+        return self._process
 
     def __init__(
         self,
@@ -105,7 +111,6 @@ class ServiceProcess(QThread):
 
             self._stop_event.clear()
             self._start_time = datetime.now()
-            from console.process_cleanup import decode_subprocess_output
             from console.services_registry import resolve_service_launch_cmd
             cmd = resolve_service_launch_cmd(self._key)
             popen_flags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
@@ -121,6 +126,9 @@ class ServiceProcess(QThread):
                 stdin=subprocess.PIPE,
                 cwd=str(self._cwd),
                 env=self._env,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
                 bufsize=1,
                 creationflags=popen_flags,
             )
@@ -143,12 +151,19 @@ class ServiceProcess(QThread):
                 {"pid": self._pid, "uptime": self.uptime, "running": True},
             )
 
-            for raw in iter(self._process.stdout.readline, b""):
-                if not raw or self._stop_event.is_set() or self._abort.is_set():
+            for line in iter(self._process.stdout.readline, ""):
+                if not line or self._stop_event.is_set() or self._abort.is_set():
                     break
-                line = decode_subprocess_output(raw).rstrip("\n\r")
-                if line:
-                    self.output.emit(self._key, line)
+                line = line.rstrip("\n\r")
+                if not line:
+                    continue
+                ipc_payload = parse_mgmt_ipc_line(line)
+                if ipc_payload is not None:
+                    req_id = str(ipc_payload.get("id") or "")
+                    if req_id:
+                        get_ipc_registry().deliver(req_id, ipc_payload)
+                    continue
+                self.output.emit(self._key, line)
 
             if self._process.poll() is None:
                 self._kill_process(self._process)

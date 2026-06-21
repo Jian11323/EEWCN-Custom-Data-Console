@@ -42,7 +42,7 @@ class CustomSourceTab(QWidget):
         g_layout.addWidget(self._status_label)
 
         hint = QLabel(
-            "• HTTP/HTTPS：每秒 GET 一次获取预警 JSON；留空即关闭。\n"
+            "• HTTP/HTTPS：按「端口配置」页设定的间隔 GET 预警 JSON；留空即关闭。\n"
             "• WS/WSS：长连接接收 JSON 报文。\n"
             "• 融合列表中的机构名取自 JSON 的 source（优先）或 sourceName。\n"
             "• 若融合服务正在运行，保存后会尝试立即加载新 URL。"

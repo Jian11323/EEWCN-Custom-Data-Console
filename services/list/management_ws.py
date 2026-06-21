@@ -1,5 +1,5 @@
 """
-融合 List 管理命令执行（由统一端口 2050 按 channel=list 调用；不再单独监听 2051）
+融合 List 管理命令执行（由控制台 IPC 按 channel=list 调用）
 """
 
 from __future__ import annotations
@@ -10,8 +10,6 @@ from datetime import datetime
 from typing import Any, Dict, Optional, Tuple
 
 logger = logging.getLogger(__name__)
-
-FUSED_MGMT_PORT = 2050
 
 TEXT_ALIASES: Dict[str, str] = {
     "服务器状态": "fanstudio_status",
@@ -104,7 +102,12 @@ def execute_list_command(command: str, fl_module, params: Optional[Dict[str, Any
 
     if command in ("source_status", "SOURCE_STATUS", "数据源状态"):
         from services.common.source_status import get_source_status_registry
-        return get_source_status_registry().snapshot()
+        snap = get_source_status_registry().snapshot()
+        snap["list_error_stats"] = dict(fl_module.error_stats)
+        return snap
+
+    if command in ("error_stats", "ERROR_STATS", "错误统计"):
+        return {"error_stats": dict(fl_module.error_stats), "cache_state": dict(fl_module.cache_state)}
 
     if command in ("stats", "统计", "STATS"):
         with fl_module.fused_data_lock:
@@ -112,19 +115,22 @@ def execute_list_command(command: str, fl_module, params: Optional[Dict[str, Any
         return {
             "fused_events_8150": n,
             "fanstudio_url": cfg["current_url"],
+            "error_stats": dict(fl_module.error_stats),
         }
 
     if command in ("auto_check", "自动检查", "AUTO_CHECK"):
         import requests
 
+        from services.common.ports import get_list_port
+
         checks = {}
-        for port in (8150,):
-            url = f"http://127.0.0.1:{port}/earthquakes"
-            try:
-                r = requests.get(url, timeout=5)
-                checks[f"http_{port}"] = {"ok": r.status_code == 200, "status": r.status_code}
-            except Exception as e:
-                checks[f"http_{port}"] = {"ok": False, "error": str(e)}
+        list_port = get_list_port()
+        url = f"http://127.0.0.1:{list_port}/earthquakes"
+        try:
+            r = requests.get(url, timeout=5)
+            checks[f"http_{list_port}"] = {"ok": r.status_code == 200, "status": r.status_code}
+        except Exception as e:
+            checks[f"http_{list_port}"] = {"ok": False, "error": str(e)}
         with cfg["lock"]:
             checks["fanstudio"] = {
                 "url": cfg["current_url"],
@@ -167,11 +173,3 @@ def execute_list_command(command: str, fl_module, params: Optional[Dict[str, Any
         return _get_commands_help()
 
     raise ValueError(f"未知命令: {command}")
-
-
-def start_list_management_server(fl_module, port: Optional[int] = None) -> None:
-    """已合并至 EEW 统一管理端口 2050；保留空实现以兼容旧调用。"""
-    logger.debug(
-        "List 独立管理端口已弃用，请使用融合管理端口 %s（channel=list）",
-        port or FUSED_MGMT_PORT,
-    )

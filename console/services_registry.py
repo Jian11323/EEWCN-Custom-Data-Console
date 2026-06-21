@@ -5,6 +5,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+from services.common.ports import format_service_ports_label
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 FUSED_CORE_ARG = "--run-fused-core"
@@ -16,9 +18,8 @@ SERVICES = {
         "name": "融合数据",
         "script": PROJECT_ROOT / "services" / "fused" / "main.py",
         "cwd": PROJECT_ROOT,
-        "description": "",
-        "ports": "预警 WS 5000 | 历史 HTTP 8150 | 管理 WS 2050",
-        "mgmt_port": 2050,
+        "description": "EEWCN 客户端配套本地融合服务（预警 WebSocket + 速报 HTTP）",
+        "ports": format_service_ports_label(),
         "config": {},
         "color": "#27AE60",
     },
@@ -42,6 +43,10 @@ def resolve_service_launch_cmd(service_key: str) -> list[str]:
     return [sys.executable, "-u", str(script)]
 
 
+def refresh_service_ports_label() -> None:
+    SERVICES["fused_core"]["ports"] = format_service_ports_label()
+
+
 def build_env(service_key: str, config: dict) -> dict:
     """将面板配置转为子进程环境变量。"""
     env = {
@@ -56,7 +61,17 @@ def build_env(service_key: str, config: dict) -> dict:
         if val is not None and str(val).strip() != "":
             env[str(cfg_key)] = str(val).strip()
     try:
+        from console.config import ConfigStore
+
+        s = ConfigStore.instance().settings
+        env["FUSED_EEW_PORT"] = str(int(s.eew_port))
+        env["FUSED_LIST_PORT"] = str(int(s.list_port))
+    except Exception:
+        pass
+    env["FUSED_CONSOLE_IPC"] = "1"
+    try:
         from services.common.source_switches import load_from_settings_path, switches_snapshot_for_env
+
         load_from_settings_path()
         env["SOURCE_SWITCHES_JSON"] = switches_snapshot_for_env()
     except Exception:

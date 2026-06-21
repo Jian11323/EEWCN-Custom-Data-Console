@@ -1,23 +1,19 @@
-"""管理 WebSocket 客户端（融合端口 2050，channel 区分 EEW/List）"""
+"""管理命令调度（控制台 IPC，无 2050 WebSocket）"""
 
 from __future__ import annotations
 
-import asyncio
 import json
-import threading
-from typing import Any, Optional
+from typing import Optional, TYPE_CHECKING
 
 from PyQt5.QtCore import QObject, pyqtSignal, QThread
 
-try:
-    import websockets
-except ImportError:
-    websockets = None  # type: ignore
+from console.ipc_client import send_ipc_command
 
-# 连接握手类消息，不在控制命令日志中重复展示
+if TYPE_CHECKING:
+    from console.process_manager import ServiceProcess
+
 _MGMT_SKIP_LOG_TYPES = frozenset({"welcome", "available_commands"})
 
-# 收到以下 type 即视为本条命令的正式响应
 _MGMT_DONE_TYPES = frozenset({
     "result", "error", "command_result", "source_status",
     "stats", "history", "full_history", "ip_details", "blacklist_list",
@@ -28,7 +24,7 @@ _MGMT_DONE_TYPES = frozenset({
 
 
 def format_management_message(raw: str) -> str:
-    """将管理端口原始报文格式化为可读 JSON（中文不转义）。"""
+    """将管理原始报文格式化为可读 JSON（中文不转义）。"""
     text = (raw or "").strip()
     if not text:
         return ""
@@ -40,84 +36,50 @@ def format_management_message(raw: str) -> str:
 
 
 class ManagementWorker(QThread):
-    """在后台线程执行单次管理命令。"""
+    """在后台线程执行单次管理命令（stdin IPC）。"""
 
-    finished = pyqtSignal(str, object)  # target, result or error str
-    message_received = pyqtSignal(str, str)  # target, raw message
+    finished = pyqtSignal(str, object)
+    message_received = pyqtSignal(str, str)
 
     def __init__(
         self,
         target: str,
-        host: str,
-        port: int,
+        service_process: Optional["ServiceProcess"],
         command: str,
         params: Optional[dict] = None,
-        connect_only: bool = False,
     ):
         super().__init__()
         self._target = target
-        self._host = host
-        self._port = port
+        self._process = service_process
         self._command = command
         self._params = params or {}
-        self._connect_only = connect_only
 
     def run(self):
-        if websockets is None:
-            self.finished.emit(self._target, "未安装 websockets 库")
+        if self._process is None or not self._process.is_running():
+            self.finished.emit(self._target, "融合服务未运行，请先启动服务")
             return
-
-        async def _run():
-            uri = f"ws://{self._host}:{self._port}"
-            async with websockets.connect(uri, open_timeout=8, close_timeout=5) as ws:
-                welcome = await asyncio.wait_for(ws.recv(), timeout=10)
-                self.message_received.emit(self._target, welcome)
-                if self._connect_only:
-                    return welcome
-                payload = {"command": self._command, **self._params}
-                await ws.send(json.dumps(payload, ensure_ascii=False))
-                responses = []
-                try:
-                    while True:
-                        msg = await asyncio.wait_for(ws.recv(), timeout=15)
-                        responses.append(msg)
-                        self.message_received.emit(self._target, msg)
-                        try:
-                            data = json.loads(msg)
-                            if data.get("type") in _MGMT_DONE_TYPES:
-                                break
-                        except json.JSONDecodeError:
-                            if msg.startswith("ERROR:") or "成功" in msg or "失败" in msg:
-                                break
-                except asyncio.TimeoutError:
-                    pass
-                return responses[-1] if responses else welcome
-
         try:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            result = loop.run_until_complete(_run())
-            loop.close()
+            result = send_ipc_command(self._process, self._command, self._params)
+            if isinstance(result, str):
+                self.message_received.emit(self._target, result)
             self.finished.emit(self._target, result)
         except Exception as e:
             self.finished.emit(self._target, str(e))
 
 
 class ManagementHub(QObject):
-    """管理命令调度中心（单端口 2050）。"""
+    """管理命令调度中心（子进程 stdin IPC）。"""
 
     result_ready = pyqtSignal(str, object)
     log_line = pyqtSignal(str)
 
-    def __init__(self, host: str, port: int):
+    def __init__(self, service_process: Optional["ServiceProcess"] = None):
         super().__init__()
-        self._host = host
-        self._port = port
+        self._process: Optional["ServiceProcess"] = service_process
         self._workers: list[ManagementWorker] = []
 
-    def update_endpoint(self, host: str, port: int):
-        self._host = host
-        self._port = port
+    def update_process(self, service_process: Optional["ServiceProcess"]) -> None:
+        self._process = service_process
 
     def send_command(self, target: str, command: str, params: Optional[dict] = None):
         """target: eew | list | both | mgmt；会写入 JSON 的 channel 字段。"""
@@ -125,7 +87,7 @@ class ManagementHub(QObject):
         if target in ("eew", "list", "both"):
             body.setdefault("channel", target)
         log_target = target if target != "mgmt" else body.get("channel", "mgmt")
-        worker = ManagementWorker(log_target, self._host, self._port, command, body)
+        worker = ManagementWorker(log_target, self._process, command, body)
         worker.finished.connect(self._on_finished)
         self._workers.append(worker)
         worker.finished.connect(lambda: self._workers.remove(worker) if worker in self._workers else None)
@@ -134,14 +96,14 @@ class ManagementHub(QObject):
     def send_both(self, command: str, params: Optional[dict] = None):
         body = dict(params or {})
         body["channel"] = "both"
-        worker = ManagementWorker("both", self._host, self._port, command, body)
+        worker = ManagementWorker("both", self._process, command, body)
         worker.finished.connect(self._on_finished)
         self._workers.append(worker)
         worker.finished.connect(lambda: self._workers.remove(worker) if worker in self._workers else None)
         worker.start()
 
     def stop_all_workers(self, wait_ms: int = 1500) -> None:
-        """退出前终止仍在运行的管理 WS 工作线程。"""
+        """退出前终止仍在运行的管理工作线程。"""
         for worker in list(self._workers):
             if worker.isRunning():
                 worker.requestInterruption()

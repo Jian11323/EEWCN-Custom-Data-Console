@@ -19,6 +19,29 @@ try:
 except ImportError:
     websockets = None  # type: ignore
 
+from services.common.ports import LOCAL_BIND, get_eew_port, get_list_port
+
+
+def build_default_checks() -> dict:
+    eew = get_eew_port()
+    lst = get_list_port()
+    return {
+        "http": {
+            "list": f"http://{LOCAL_BIND}:{lst}/earthquakes",
+        },
+        "ws": {
+            "eew": f"ws://{LOCAL_BIND}:{eew}",
+        },
+    }
+
+
+def port_probe_order() -> tuple[str, ...]:
+    return ("eew", "list")
+
+
+DEFAULT_CHECKS = build_default_checks()
+PORT_PROBE_ORDER = port_probe_order()
+
 
 class HealthCheckWorker(QThread):
     finished = pyqtSignal(dict)
@@ -78,15 +101,3 @@ class HealthCheckWorker(QThread):
                 results["ws_error"] = str(e)
 
         self.finished.emit(results)
-
-
-DEFAULT_CHECKS = {
-    "http": {
-        "8150": "http://127.0.0.1:8150/earthquakes",
-    },
-    "ws": {
-        "5000": "ws://127.0.0.1:5000",
-    },
-}
-
-PORT_PROBE_ORDER = ("5000", "8150")

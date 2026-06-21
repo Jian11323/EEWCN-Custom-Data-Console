@@ -55,13 +55,21 @@ class AboutTab(QWidget):
         layout.setContentsMargins(24, 24, 24, 24)
         layout.setSpacing(14)
 
-        title = QLabel(f"自定义数据源控制台 v{APP_VERSION}")
+        title = QLabel(f"EEWCN 数据源控制台 v{APP_VERSION}")
         title.setStyleSheet(_TITLE)
         layout.addWidget(title)
 
         ver = QLabel(f"当前版本：{VERSION_LABEL}")
         ver.setStyleSheet(_SUB)
         layout.addWidget(ver)
+
+        role = QLabel(
+            "本软件为 EEWCN 客户端配套可视化控制台，用于启停本地融合数据服务、"
+            "配置数据源与端口，并通过 custom.js 供 EEWCN 订阅预警与速报。"
+        )
+        role.setWordWrap(True)
+        role.setStyleSheet(_BODY)
+        layout.addWidget(role)
 
         dev = QLabel("开发者：纪安")
         dev.setStyleSheet(_BODY)

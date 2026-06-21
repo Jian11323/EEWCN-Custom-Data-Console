@@ -1,1 +1,2 @@
-"""EEW 融合服务包。入口: services/fused/eew/engine.py"""
+# 架构说明见 docs/ARCHITECTURE.md
+# 此包已废弃，请使用 services.fused.eew

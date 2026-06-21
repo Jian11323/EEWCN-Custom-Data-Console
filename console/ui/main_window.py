@@ -27,19 +27,19 @@ from console.services_registry import (
     resolve_service_launch_path,
 )
 from console.ui.combined_log import CombinedLogPanel
-from console.ui.control_tab import ControlTab
+from console.ui.control_tab import ManagementControlTab
 from console.ui.service_panel import ServicePanel
 from console.ui.status_tab import StatusTab
 from console.ui.styles import LIGHT_THEME, global_btn_style
-from console.ui.upstream_tab import UpstreamTab
 from console.ui.sources_tab import SourcesTab
 from console.ui.about_tab import AboutTab
 from console.ui.custom_source_tab import CustomSourceTab
+from console.ui.config_tab import ConfigTab
 
 TAB_ITEMS: List[Tuple[str, str]] = [
     ("服务管理", "service"),
-    ("上游切换", "upstream"),
-    ("控制命令", "control"),
+    ("端口配置", "config"),
+    ("管理控制", "mgmt"),
     ("数据开关", "sources"),
     ("自定义数据源", "custom"),
     ("采集状态", "status"),
@@ -100,14 +100,13 @@ def _apply_window_icon(target) -> None:
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("自定义数据源控制台")
+        self.setWindowTitle("EEWCN 数据源控制台")
         _apply_window_icon(self)
         self.resize(1280, 860)
         self.setMinimumSize(1020, 680)
 
         self._store = ConfigStore.instance()
-        s = self._store.settings
-        self._mgmt = ManagementHub(s.mgmt_host, s.mgmt_port)
+        self._mgmt = ManagementHub()
         self._processes: Dict[str, Optional[ServiceProcess]] = {k: None for k in SERVICES}
         self._panels: Dict[str, ServicePanel] = {}
         self._logs: Dict[str, CombinedLogPanel] = {}
@@ -129,7 +128,7 @@ class MainWindow(QMainWindow):
         self._uptime_timer.timeout.connect(self._refresh_uptimes)
         self._uptime_timer.start(1000)
 
-        if s.auto_start_on_launch:
+        if self._store.settings.auto_start_on_launch:
             QTimer.singleShot(800, self._start_all_ordered)
 
     def _setup_ui(self):
@@ -146,7 +145,7 @@ class MainWindow(QMainWindow):
         side_layout.setContentsMargins(0, 0, 0, 0)
         side_layout.setSpacing(6)
 
-        title = QLabel("自定义数据源控制台")
+        title = QLabel("EEWCN 数据源控制台")
         title.setWordWrap(True)
         title.setStyleSheet("font-size: 14px; font-weight: bold; padding-bottom: 4px;")
         side_layout.addWidget(title)
@@ -212,16 +211,16 @@ class MainWindow(QMainWindow):
         self._service_stack = service_stack
         self._content_stack.addWidget(_make_page(service_stack, service_log))
 
-        upstream_log = CombinedLogPanel()
-        self._logs["upstream"] = upstream_log
-        self._content_stack.addWidget(
-            _make_page(UpstreamTab(self._mgmt, upstream_log), upstream_log)
-        )
+        from console.services_registry import refresh_service_ports_label
 
-        control_log = CombinedLogPanel()
-        self._logs["control"] = control_log
+        refresh_service_ports_label()
+        self._config_tab = ConfigTab(self._service_is_alive, mgmt=self._mgmt)
+        self._content_stack.addWidget(self._config_tab)
+
+        mgmt_log = CombinedLogPanel()
+        self._logs["mgmt"] = mgmt_log
         self._content_stack.addWidget(
-            _make_page(ControlTab(self._mgmt, control_log), control_log)
+            _make_page(ManagementControlTab(self._mgmt, mgmt_log), mgmt_log)
         )
 
         sources_log = CombinedLogPanel()
@@ -464,7 +463,7 @@ class MainWindow(QMainWindow):
         )
 
     def _teardown_runtime_threads(self) -> None:
-        """回收控制台内 QThread / 管理 WS 工作线程。"""
+        """回收控制台内 QThread / 管理工作线程。"""
         self._status_tab.cancel_background_work()
         self._uptime_timer.stop()
         self._mgmt.stop_all_workers()
@@ -506,10 +505,19 @@ class MainWindow(QMainWindow):
         proc = self._processes.get(key)
         if proc:
             self._panels[key].set_running(True, proc.pid, proc.uptime)
+            if key == "fused_core":
+                self._mgmt.update_process(proc)
+                from console.services_registry import refresh_service_ports_label
+
+                refresh_service_ports_label()
+                if key in self._panels:
+                    self._panels[key]._lbl_ports.setText(SERVICES[key].get("ports", "--"))
         self._logs["service"].append(SERVICES[key]["name"], "=== 已启动 ===")
         self._update_total()
 
     def _on_stopped(self, key: str, code: int):
+        if key == "fused_core":
+            self._mgmt.update_process(None)
         if self._processes.get(key) is not None:
             self._processes[key] = None
         if not self._stop_busy:

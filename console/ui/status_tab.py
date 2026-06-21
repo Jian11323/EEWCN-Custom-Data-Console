@@ -11,8 +11,8 @@ from PyQt5.QtWidgets import (
     QPushButton, QGridLayout,
 )
 
-from console.config import ConfigStore
-from console.health_monitor import HealthCheckWorker, DEFAULT_CHECKS, PORT_PROBE_ORDER
+
+from console.health_monitor import HealthCheckWorker, build_default_checks, port_probe_order
 from console.management_client import ManagementWorker
 from console.ui.combined_log import CombinedLogPanel
 from console.ui.styles import panel_btn_style
@@ -130,9 +130,9 @@ class StatusTab(QWidget):
 
         _fill_name_chip_grid(
             port_layout,
-            PORT_PROBE_ORDER,
+            port_probe_order(),
             self._chips,
-            lambda key: key,
+            lambda key: {"eew": "预警 WS", "list": "速报 HTTP"}.get(key, key),
         )
         layout.addWidget(port_group)
         layout.addStretch()
@@ -210,10 +210,10 @@ class StatusTab(QWidget):
             return
         if self._source_worker and self._source_worker.isRunning():
             return
-        s = ConfigStore.instance().settings
-        self._source_worker = ManagementWorker(
-            "eew", s.mgmt_host, s.mgmt_port, "source_status", {"channel": "eew"},
-        )
+        proc = self._get_processes().get("fused_core")
+        if not proc or not proc.is_running():
+            return
+        self._source_worker = ManagementWorker("both", proc, "source_status", {"channel": "both"})
         self._source_worker.finished.connect(self._on_source_status)
         self._source_worker.start()
 
@@ -277,7 +277,7 @@ class StatusTab(QWidget):
                 )
             self._log.append_line("【端口探活】 融合核心未运行，跳过（启动服务后将自动探活）")
             return
-        self._health_worker = HealthCheckWorker(DEFAULT_CHECKS)
+        self._health_worker = HealthCheckWorker(build_default_checks())
         self._health_worker.finished.connect(self._on_health)
         self._health_worker.start()
 
@@ -293,7 +293,7 @@ class StatusTab(QWidget):
                 chip.setText("异常")
                 chip.setStyleSheet("padding: 4px 8px; background: #da3633; border-radius: 4px; color: white;")
         lines = [f"【端口探活】 {ts}"]
-        for key in PORT_PROBE_ORDER:
+        for key in port_probe_order():
             info = results.get(key, {})
             if not info:
                 continue
